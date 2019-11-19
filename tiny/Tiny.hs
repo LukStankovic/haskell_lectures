@@ -17,6 +17,9 @@ data Exp = Add   Exp Exp      -- e + e
          | Gth   Exp Exp      -- e > e
          | Leq   Exp Exp      -- e <= e
          | Geq   Exp Exp      -- e >= e
+         | And   Exp Exp      -- e && e
+         | Or    Exp Exp      -- e || e
+         | Not   Exp          -- !e
          | Asgn  String Exp   -- id = e
          | Cond  Exp Exp Exp  -- e ? e : e
          | Read               -- read
@@ -30,6 +33,7 @@ data Com = Eval  Exp          -- e;
          | Write Exp          -- write e;
          | Seq   Com Com      -- c ; c
          | Skip               -- ;
+         | For   Exp Exp Exp  -- for e e e
 
 type Store  = String -> Int
 type Input  = [Int]
@@ -81,6 +85,10 @@ e (Num x) s = (x, s)
 
 e (Var v) (State s i o) = (s v, (State s i o))
 
+e (And e1 e2) s = evalBin (*) e1 e2 s
+e (Or e1 e2) s = evalBin (+) e1 e2 s
+e (Not e1) s = let (v, s') = e e1 s
+               in (if v == 0 then 1 else 0, s')
 --------------------------------
 -- semantika prikazu
 --------------------------------
@@ -104,6 +112,8 @@ c (Write e1) s = let (v1, (State s' i o)) = e e1 s
                  in (State s' i (o++[v1]))
 
 c Skip s = s
+
+c (For a b c) s
 
 --------------------------------
 -- semantika programu
