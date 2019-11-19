@@ -1,0 +1,12 @@
+digraph fsm {
+rankdir="LR";
+start [shape="plaintext",label="start"];
+start->0;
+0[shape="circle",label="q0"];
+1[shape="circle",label="q1"];
+2[shape="circle",label="q2"];
+3[shape="doublecircle",label="q3"];
+1->2[label="ε"];
+0->1[label="a"];
+2->3[label="b"];
+}
