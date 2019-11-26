@@ -9,9 +9,7 @@ data Reg = Empty
          | Literal Char 
          | Or Reg Reg 
          | Then Reg Reg 
-         | Star Reg
-         | Opt Reg           
-         | Plus Reg          
+         | Star Reg       
            deriving Eq
 
 data Move a = Move a Char a | Emove a a
@@ -24,90 +22,83 @@ data Nfa a  = NFA (Set a) (Set (Move a)) a (Set a)
 pp :: [Char] -> IO ()
 pp x = putStr (x)
 
+printReg :: Reg -> [Char]
+printReg Empty   = "_"
+printReg Epsilon = "&"
+printReg (Literal ch) = [ch]
+printReg (Or r1 r2) = "(" ++ printReg r1 ++ "+" ++ printReg r2 ++ ")"
+printReg (Then r1 r2) = "(" ++ printReg r1 ++ printReg r2 ++ ")"
+printReg (Star r) = "(" ++ printReg r ++")*" 
+
 instance Show Reg where
-    show = printRE
-
-printRE :: Reg -> [Char]
-
-printRE Empty   = "_"
-printRE Epsilon = "&"
-printRE (Literal ch) = [ch]
-printRE (Or r1 r2) = "(" ++ printRE r1 ++ "+" ++ printRE r2 ++ ")"
-printRE (Then r1 r2) = "(" ++ printRE r1 ++ printRE r2 ++ ")"
-printRE (Star r) = "(" ++ printRE r ++")*"
-printRE (Opt r) = "(" ++ printRE r ++ "?)"   
-printRE (Plus r) = "(" ++ printRE r ++")+"   
-
+    show = printReg
 
 literals :: Reg -> [Char]
-literals Empty        = []
-literals Epsilon      = []
+literals Empty = []
+literals Epsilon = []
 literals (Literal ch) = [ch]
-literals (Or r1 r2)   = literals r1 ++ literals r2
+literals (Or r1 r2) = literals r1 ++ literals r2
 literals (Then r1 r2) = literals r1 ++ literals r2
-literals (Star r)     = literals r
-literals (Opt r)      = literals r   
-literals (Plus r)     = literals r   
+literals (Star r) = literals r
 
 
 -- vypis pro nfa i dfa
 print_automat :: Nfa Int -> IO()
 print_automat (NFA states moves start finish) = pp (print_nfa (NFA states moves start finish))
 
-
 --- NFA
 print_nfa :: Nfa Int -> [Char]
 print_nfa (NFA states moves start finish)
       = "Stavy:\t" ++ show_states (S.toList states) ++ "\n\n" ++
         "Kroky:\n" ++ (concat (map print_move (S.toList moves))) ++ "\n\n" ++
-        "Pocatecni:\t" ++ show start ++ "\n\n" ++
-        "Prijimajici:\t" ++ show_states (S.toList finish) ++ "\n"
+        "Pocatecni: " ++ show start ++ "\n" ++
+        "Prijimajici: " ++ show_states (S.toList finish) ++ "\n"
 
 show_states :: [Int] -> [Char]
 show_states = concat . (map ((++" ") . show))
 
 print_move :: Move Int -> [Char]
-print_move (Move s1 c s2) = "\t" ++ show s1 ++ "\t" ++ [c] ++ "\t"
+print_move (Move s1 c s2) = "\t " ++ show s1 ++ " ---- " ++ [c] ++ " ---> "
                             ++ show s2 ++ "\n"
-print_move (Emove s1 s2) = "\t" ++ show s1 ++ "\t&\t" ++ show s2 ++ "\n"
+print_move (Emove s1 s2) = "\t " ++ show s1 ++ " ---- & ---> " ++ show s2 ++ "\n"
 
  
 reg_to_nfa :: Reg -> Nfa Int
-reg_to_nfa Epsilon      = NFA
+reg_to_nfa Epsilon = NFA
                      (S.fromList [0 .. 1])
                      (S.singleton  (Emove 0 1))
                      0
                      (S.singleton  1)
-reg_to_nfa (Literal c)  = NFA
+reg_to_nfa (Literal c) = NFA
                      (S.fromList [0 .. 1])
                      (S.singleton  (Move 0 c 1))
                      0
                      (S.singleton  1)
-reg_to_nfa (Or r1 r2)   = m_or (reg_to_nfa r1) (reg_to_nfa r2)
-reg_to_nfa (Then r1 r2) = m_then (reg_to_nfa r1) (reg_to_nfa r2)
-reg_to_nfa (Star r)     = m_star (reg_to_nfa r)
+reg_to_nfa (Or r1 r2) = or_move (reg_to_nfa r1) (reg_to_nfa r2)
+reg_to_nfa (Then r1 r2) = then_move (reg_to_nfa r1) (reg_to_nfa r2)
+reg_to_nfa (Star r) = star_move (reg_to_nfa r)
 
 -- Jednotlivé operace - nebo, spojeni, iterace
-m_or :: Nfa Int -> Nfa Int -> Nfa Int
-m_or (NFA states1 moves1 start1 finish1) (NFA states2 moves2 start2 finish2)
+or_move :: Nfa Int -> Nfa Int -> Nfa Int
+or_move (NFA states1 moves1 start1 finish1) (NFA states2 moves2 start2 finish2)
     = NFA
       (S.unions [states1',states2',newstates])
       (S.unions [moves1' ,moves2' ,newmoves] )
       0
-      (S.singleton  (m1+m2+1))
+      (S.singleton (m1+m2+1))
     where
-      m1        = S.size states1
-      m2        = S.size states2
-      states1'  = S.map (renumber 1) states1
-      states2'  = S.map (renumber (m1+1)) states2
+      m1 = S.size states1
+      m2 = S.size states2
+      states1' = S.map (renumber 1) states1
+      states2' = S.map (renumber (m1+1)) states2
       newstates = S.fromList [0,(m1+m2+1)]
-      moves1'   = S.map (renumber_move 1) moves1
-      moves2'   = S.map (renumber_move (m1+1)) moves2
-      newmoves  = S.fromList [Emove 0 1, Emove 0 (m1+1),
-                              Emove m1 (m1+m2+1), Emove (m1+m2) (m1+m2+1) ]
+      moves1' = S.map (renumber_move 1) moves1
+      moves2' = S.map (renumber_move (m1+1)) moves2
+      newmoves = S.fromList [Emove 0 1, Emove 0 (m1+1),
+                             Emove m1 (m1+m2+1), Emove (m1+m2) (m1+m2+1) ]
 
-m_then :: Nfa Int -> Nfa Int -> Nfa Int
-m_then (NFA states1 moves1 start1 finish1) (NFA states2 moves2 start2 finish2)
+then_move :: Nfa Int -> Nfa Int -> Nfa Int
+then_move (NFA states1 moves1 start1 finish1) (NFA states2 moves2 start2 finish2)
     = NFA
       (S.union states1 states2')
       (S.union moves1 moves2')
@@ -115,24 +106,24 @@ m_then (NFA states1 moves1 start1 finish1) (NFA states2 moves2 start2 finish2)
       finish2'
     where
       states2' = S.map (renumber k) states2
-      moves2'  = S.map (renumber_move k) moves2
+      moves2' = S.map (renumber_move k) moves2
       finish2' = S.map (renumber k) finish2
-      k        = S.size states1 - 1
+      k = S.size states1 - 1
 
-m_star :: Nfa Int -> Nfa Int 
-m_star (NFA states moves start finish)
+star_move :: Nfa Int -> Nfa Int 
+star_move (NFA states moves start finish)
     = NFA
       (S.union states' newstates)
-      (S.union moves'  newmoves)
+      (S.union moves' newmoves)
       0
-      (S.singleton  (m+1))
+      (S.singleton (m+1))
     where
-      m         = S.size states
-      states'   = S.map (renumber 1) states
+      m = S.size states
+      states' = S.map (renumber 1) states
       newstates = S.fromList [ 0 , m+1 ]
-      moves'    = S.map (renumber_move 1) moves
-      newmoves  = S.fromList [Emove 0 1, Emove m 1, Emove 0 (m+1), 
-                              Emove m (m+1)]
+      moves' = S.map (renumber_move 1) moves
+      newmoves = S.fromList [Emove 0 1, Emove m 1, Emove 0 (m+1), 
+                             Emove m (m+1)]
 
 
 closure :: Ord a => Nfa a -> Set a -> Set a
@@ -240,7 +231,7 @@ addmoves :: Nfa Int -> Set Int -> [Char] -> Nfa (Set Int) -> Nfa (Set Int)
 addmoves mach x [] dfa    = dfa
 addmoves mach x (c:r) dfa = addmoves mach x r (addmove mach x c dfa)
 
--- prida novy krok
+-- pridani noveho kroku
 addmove :: Nfa Int -> Set Int -> Char -> Nfa (Set Int) -> Nfa (Set Int)
 addmove mach x c (NFA states moves start finish)
     = NFA states' moves' start finish'
@@ -255,19 +246,17 @@ addmove mach x c (NFA states moves start finish)
     (NFA s m q term) = mach
 
 nfa_limit :: Eq a => (Nfa a -> Nfa a) -> Nfa a -> Nfa a
-
 nfa_limit f n 
     | (nfa_eq n next) = n         
-    | otherwise       = nfa_limit f next
+    | otherwise = nfa_limit f next
                 where
                 next = f n
                 nfa_eq (NFA s1 n1 st1 f1) (NFA s2 n2 st2 f2)
                     = s1 == s2 && n1 == n2 && st1 == st2 && f1 == f2
 
 
---------------------------
---        TESTY
---------------------------
+
+-- Testovací
 
 regexp = Or (Then (Literal 'a') (Literal 'b')) (Then (Literal 'b') (Literal 'a'))
 regexp2 = Or (Literal 'a') (Literal 'b')
